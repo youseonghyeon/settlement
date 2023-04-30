@@ -1,2 +1,17 @@
-package com.batch.settlement.service;public class TransferService {
+package com.batch.settlement.service;
+
+import com.batch.settlement.dto.TransferForm;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class TransferService {
+
+
+    public boolean transferApi(TransferForm transferForm) {
+        return true;
+    }
 }

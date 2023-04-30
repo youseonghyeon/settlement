@@ -15,7 +15,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
-public class WireTransferJob {
+public class TransferJob {
 
     private final JobRepository jobRepository;
     private final PlatformTransactionManager tm;
@@ -30,7 +30,7 @@ public class WireTransferJob {
 
     @Bean
     public Step wireTransferStep () {
-        return new StepBuilder("dailySettlementJobStep", jobRepository)
+        return new StepBuilder("wireTransferStep", jobRepository)
                 .tasklet(((contribution, chunkContext) -> {
                     log.info("WireTransferJob.wireTransferStep");
                     return RepeatStatus.FINISHED;

@@ -1,1 +1,38 @@
+spring:
+  config:
+    activate:
+      on-profile: default
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/settlement
+    username: epfzja
+    password: Tjdgus12
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  #    show-sql: true
+    open-in-view: false
+  batch:
+    jdbc:
+      initialize-schema: always
+logging:
+  level:
+    com.batch.settlement: debug
 
+
+---
+
+spring:
+  config:
+    activate:
+      on-profile: tb
+
+
+---
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+---

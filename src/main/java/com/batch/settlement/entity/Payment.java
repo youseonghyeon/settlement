@@ -1,14 +1,18 @@
-package com.settlement.dataharvester.domain.entity;
+package com.batch.settlement.entity;
 
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
+@Slf4j
 @Entity
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Getter
+@Setter
+@ToString
+@NoArgsConstructor
+@AllArgsConstructor
 public class Payment {
 
     @Id
@@ -17,25 +21,34 @@ public class Payment {
 
     private Long productId;
 
-    private long paymentAmount;
+    private Long paymentAmount;
 
-    @Enumerated(EnumType.STRING)
-    private PaymentMethod paymentMethod;
+    private String paymentMethod;
 
     private LocalDateTime paymentDatetime;
-    @Enumerated(EnumType.STRING)
-    private PaymentStatus paymentStatus;
+
+    private String paymentStatus;
 
     private Long sellerId;
+
     private Long buyerId;
 
-    public Payment(Long productId, long paymentAmount, PaymentMethod paymentMethod, LocalDateTime paymentDatetime, PaymentStatus paymentStatus, Long sellerId, Long buyerId) {
-        this.productId = productId;
-        this.paymentAmount = paymentAmount;
-        this.paymentMethod = paymentMethod;
-        this.paymentDatetime = paymentDatetime;
-        this.paymentStatus = paymentStatus;
-        this.sellerId = sellerId;
-        this.buyerId = buyerId;
+
+    public static Payment createRandom() {
+        Payment p = new Payment();
+        p.productId = r();
+        p.paymentAmount = r();
+        p.paymentMethod = "CREDIT_CARD";
+        p.paymentDatetime = LocalDateTime.now();
+        p.paymentStatus = "PAID";
+        p.sellerId = r();
+        p.buyerId = r();
+        return p;
     }
+
+    private static Long r() {
+        Double v = (Double) Math.random() * 10000;
+        return v.longValue();
+    }
+
 }

@@ -1,4 +1,4 @@
-package com.settlement.dataharvester.domain.entity;
+package com.batch.settlement.entity;
 
 public enum PaymentStatus {
     PAID("결제 완료"),
