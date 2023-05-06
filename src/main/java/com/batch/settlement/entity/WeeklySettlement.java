@@ -1,23 +1,20 @@
 package com.batch.settlement.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.ToString;
-
-import java.time.LocalDate;
 
 @Entity
-@Getter
-@Table(name = "daily_settlement")
-@ToString
-public class DailySettlement {
+@Table(name = "weekly_settlement")
+public class WeeklySettlement {
 
     @Id
     @GeneratedValue
     private Long id;
 
-    @Column(name = "settlement_date")
-    private LocalDate settlementDate;
+    @Column(name = "year")
+    private Long year;
+
+    @Column(name = "week")
+    private Long week;
 
     @Column(name = "store_id")
     private Long storeId;
@@ -30,6 +27,12 @@ public class DailySettlement {
 
     @Column(name = "delivery_fee")
     private Long deliveryFee;
+
+    @Column(name = "commission")
+    private Long commission;
+
+    @Column(name = "store_profit")
+    private Long storeProfit;
 
     @Column(name = "delivery_profit")
     private Long deliveryProfit;

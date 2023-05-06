@@ -1,10 +1,10 @@
 package com.batch.settlement.job;
 
-import com.batch.settlement.dto.TransferForm;
+import com.bank.TransactionApi;
+import com.batch.settlement.dto.TransactionRequest;
 import com.batch.settlement.entity.DailySettlement;
-import com.batch.settlement.entity.Payment;
-import com.batch.settlement.service.TransferService;
-import com.batch.settlement.tasklet.DailyTasklet;
+import com.batch.settlement.entity.TransactionHistory;
+import com.batch.settlement.job.vaildator.DailyJobParameterValidator;
 import jakarta.persistence.EntityManagerFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +15,7 @@ import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
@@ -28,16 +26,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
+import java.util.Collections;
 
 /**
  * 일별 정산 - 일별 정산이 끝났으면 API를 호출하여 정산 금액 송금 처리
- * 주별 정산
- * 월별 정산
  */
 @Slf4j
 @Configuration
@@ -46,80 +41,82 @@ public class DailyJob {
 
     private final JobRepository jobRepository;
     private final PlatformTransactionManager tm;
-    private final EntityManagerFactory em;
-    private final DailyTasklet dailyTasklet;
+    private final EntityManagerFactory emf;
     private final JdbcTemplate jdbcTemplate;
-    private final TransferService transferService;
+    private final DailyJobParameterValidator dailyJobParameterValidator;
+    private final TransactionApi transactionApi;
+
+
+    @Value("${api.payment.chunk-size}")
+    private int chunkSize;
 
     @Bean(name = "dailySettlementJob")
     public Job dailySettlementJob() {
-        log.info("em={}", em);
+        log.info("em={}", emf);
         return new JobBuilder("dailySettlementJob", jobRepository)
+                .validator(dailyJobParameterValidator)
                 .start(insertTotalPaymentAmountOneDay(null))
-                .next(transferTotalPaymentAmountOneDay(null))
+                .next(sendPaymentViaAPI())
                 .build();
     }
-
 
     @Bean
     @JobScope
-    public Step transferTotalPaymentAmountOneDay(@Value("#{jobParameters[targetDate]}") String targetDate) {
-        return new StepBuilder("transferTotalPaymentAmountOneDay", jobRepository)
-                .<DailySettlement, DailySettlement>chunk(100, tm)
-                .reader(dailySettlementReader(targetDate))
+    public Step sendPaymentViaAPI() {
+        return new StepBuilder("sendPaymentViaAPI", jobRepository)
+                .<DailySettlement, TransactionHistory>chunk(chunkSize, tm)
+                .reader(dailySettlementReader(null))
                 .processor(dailySettlementProcessor())
-                .writer(new ItemWriter<DailySettlement>() {
-                    @Override
-                    public void write(Chunk<? extends DailySettlement> chunk) throws Exception {
-                        List<? extends DailySettlement> items = chunk.getItems();
-                        
-                    }
-                })
+                .writer(dailySettlementWriter())
                 .build();
+    }
 
+
+    @Bean
+    public ItemProcessor<DailySettlement, TransactionHistory> dailySettlementProcessor() {
+        return (item) -> {
+            // api 요청 및 결과 받기
+            // TODO 에러가 발생하면 어떻게 처리할 것인가? -> 테스트도 한번 해보자
+            TransactionRequest requestParameters = new TransactionRequest(item.getStoreId(), "SINHAN", "0000-000000-00", item.getSettlementAmount());
+            TransactionHistory history = transactionApi.request(requestParameters);
+            return history;
+        };
     }
 
     @Bean
-    @StepScope
-    public ItemProcessor<? super DailySettlement, ? extends DailySettlement> dailySettlementProcessor() {
-        return dailySettlement -> {
-            TransferForm transferForm = new TransferForm(-1L, dailySettlement.getSellerId(), dailySettlement.getPaymentAmount(), dailySettlement.getPaymentAmount() / 100 * 9);
-            boolean transferStatus = transferService.transferApi(transferForm);
-            return dailySettlement;
-        };
+    public ItemWriter<TransactionHistory> dailySettlementWriter() {
+        return new JpaItemWriterBuilder<TransactionHistory>()
+                .entityManagerFactory(emf)
+                .build();
     }
 
 
     @Bean
     @StepScope
     public JpaPagingItemReader<DailySettlement> dailySettlementReader(@Value("#{jobParameters[targetDate]}") String targetDate) {
+        LocalDate parsedDate = LocalDate.parse(targetDate, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
         return new JpaPagingItemReaderBuilder<DailySettlement>()
                 .name("dailySettlementReader")
-                .entityManagerFactory(em)
-                .pageSize(100)
-                .queryString("select d from DailySettlement d where d.settlementDatetime = '" + targetDate + "'")
-
+                .entityManagerFactory(emf)
+                .pageSize(chunkSize)
+                .queryString("select d from DailySettlement d where d.settlementDate = :targetDate")
+                .parameterValues(Collections.singletonMap("targetDate", parsedDate))
                 .build();
     }
 
-    @Bean(destroyMethod = "")
+    @Bean
     @JobScope
     public Step insertTotalPaymentAmountOneDay(@Value("#{jobParameters[targetDate]}") String targetDate) {
-        LocalDate ParsedDate = LocalDate.parse(targetDate, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        LocalDate nextDate = ParsedDate.plusDays(1);
-        String startDate = ParsedDate.toString() + " 00:00:00";
-        String endDate = nextDate.toString() + " 00:00:00";
-
         return new StepBuilder("paymentSum", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
-                    log.info("SQL 실행");
-                    String sql = "insert into daily_settlement " +
-                            "(select seller_id, sum(payment_amount) as payment_amount, '" + startDate + "' " +
-                            "from payment " +
-                            "where payment_datetime between '" + startDate + "' and '" + endDate + "' " +
-                            "group by seller_id);";
-                    log.info("sql={}", sql);
-                    jdbcTemplate.execute(sql);
+                    log.info("Execute daily settlement.");
+                    String query = "insert into daily_settlement (delivery_fee, delivery_profit, order_count, order_price, settlement_amount, settlement_date, store_id, user_payment) " +
+                            "select sum(s.delivery_fee), sum(s.delivery_profit), count(*), sum(s.order_price), sum(s.settlement_amount), ?, s.store_id, sum(s.user_payment) " +
+                            "from Settlement s " +
+                            "where date(s.settlement_datetime) = ? " +
+                            "group by store_id, date(settlement_datetime)";
+                    jdbcTemplate.update(query, targetDate, targetDate);
                     return RepeatStatus.FINISHED;
                 }, tm)
                 .build();
@@ -127,20 +124,9 @@ public class DailyJob {
 
 
     @Bean
-    public ItemReader<Payment> paymentItemReader() {
-        return new JpaPagingItemReaderBuilder<Payment>()
-                .name("paymentItemReader")
-                .entityManagerFactory(em)
-                .pageSize(100)
-                .queryString("select p from Payment p")
-                .build();
-
-    }
-
-    @Bean
     public ItemWriter<DailySettlement> paymentItemWriter() {
         return new JpaItemWriterBuilder<DailySettlement>()
-                .entityManagerFactory(em)
+                .entityManagerFactory(emf)
                 .build();
     }
 }

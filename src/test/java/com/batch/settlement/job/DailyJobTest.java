@@ -23,12 +23,17 @@ class DailyJobTest {
 
     @Test
     void dailyJobTest() throws JobInstanceAlreadyCompleteException, JobExecutionAlreadyRunningException, JobParametersInvalidException, JobRestartException {
+
+        jdbcTemplate.execute("truncate table daily_settlement");
+        jdbcTemplate.execute("truncate table transaction_history");
+
+
         JobLauncherTestUtils dailySettlementJob = jobTestUtils.getJobTester("dailySettlementJob");
         JobLauncher jobLauncher = dailySettlementJob.getJobLauncher();
 
         JobParameters jobParameters = jobTestUtils.getRandomJobParameters();
         JobParameters jobParameters2 = new JobParametersBuilder(jobParameters)
-                .addString("targetDate", "2023-04-23")
+                .addString("targetDate", "2023-05-02")
                 .toJobParameters();
         jobLauncher.run(dailySettlementJob.getJob(), jobParameters2);
     }
@@ -36,6 +41,7 @@ class DailyJobTest {
     @Test
     void trunRcate() {
         jdbcTemplate.execute("truncate table daily_settlement");
+        jdbcTemplate.execute("truncate table transaction_history");
     }
 
 

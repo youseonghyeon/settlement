@@ -19,6 +19,10 @@ logging:
   level:
     com.batch.settlement: debug
 
+api:
+  payment:
+    chunk-size: 1000
+
 
 ---
 
